@@ -1,0 +1,8 @@
+python-telegram-bot
+pandas
+numpy
+requests
+beautifulsoup4
+snscrape
+fake-useragent
+scikit-learn
