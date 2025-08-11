@@ -46,15 +46,15 @@ conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 c = conn.cursor()
 
 # إنشاء الجداول
-c.execute('''CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
+c.execute )CREATE TABLE IF NOT EXISTS users 
+    user_id BIGINT PRIMARY KEY,
     username TEXT,
-    join_date TEXT DEFAULT CURRENT_TIMESTAMP,
-    last_login TEXT,
+    join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login TIMESTAMP,
     points INTEGER DEFAULT 0,
     level INTEGER DEFAULT 1,
     referral_code TEXT,
-    referrer_id INTEGER,
+    referrer_id BIGINT,
     verified BOOLEAN DEFAULT FALSE,
     total_earned INTEGER DEFAULT 0,
     total_spent INTEGER DEFAULT 0,
@@ -63,7 +63,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS users (
     trust_score INTEGER DEFAULT 100,
     escrow_balance REAL DEFAULT 0,
     debt REAL DEFAULT 0
-)''')
+(
 
 c.execute('''CREATE TABLE IF NOT EXISTS referrals (
     referral_id INTEGER PRIMARY KEY AUTOINCREMENT,
