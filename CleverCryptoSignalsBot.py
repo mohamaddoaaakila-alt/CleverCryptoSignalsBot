@@ -42,7 +42,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ===== قاعدة البيانات =====
-conn = sqlite3.connect('golden_pyramid.db', check_same_thread=False)
+conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 c = conn.cursor()
 
 # إنشاء الجداول
