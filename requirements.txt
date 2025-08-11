@@ -1,16 +1,4 @@
-python-telegram-bot
-pandas
-numpy
-requests
-beautifulsoup4
-fake-useragent
-scikit-learn
-cryptography
-Pillow
-snscrape==0.6.2.20230320
-importlib-metadata==6.8.0
-importlib-resources==6.1.1
-sqlite3 # إذا كنت ستستمر في استخدام SQLite (لا يوصى به لـ Render)
+sqlite3
 hashlib
 random
 json
@@ -26,6 +14,7 @@ cryptography
 Pillow
 beautifulsoup4
 scikit-learn
-fake-useragent # إذا كنت ستستمر في استخدامها
-snscrape # إذا كنت ستستمر في استخدامها
-psycopg2-binary # إذا انتقلت إلى PostgreSQL
+fake-useragent
+snscrape
+psycopg2-binary
+
