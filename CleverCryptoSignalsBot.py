@@ -1,7 +1,4 @@
-import sys, os
-print(f"Python version: {sys.version}")
-print(f"Current directory: {os.getcwd()}")
-print(f"Files in directory: {os.listdir()}")
+
 import sqlite3
 import hashlib
 import random
