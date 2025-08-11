@@ -1,0 +1,545 @@
+import sqlite3
+import hashlib
+import random
+import json
+import time
+import logging
+import os
+import re
+import numpy as np
+import pandas as pd
+import requests
+from datetime import datetime, timedelta
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Updater, CommandHandler, CallbackContext, CallbackQueryHandler, MessageHandler, Filters,
+    JobQueue
+)
+from cryptography.fernet import Fernet
+from PIL import Image, ImageDraw, ImageFont
+from bs4 import BeautifulSoup
+import snscrape.modules.twitter as sntwitter
+from sklearn.ensemble import IsolationForest
+from fake_useragent import UserAgent
+
+# ===== إعدادات النظام =====
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# ===== قاعدة البيانات =====
+conn = sqlite3.connect('golden_pyramid.db', check_same_thread=False)
+c = conn.cursor()
+
+# إنشاء الجداول
+c.execute('''CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    username TEXT,
+    join_date TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_login TEXT,
+    points INTEGER DEFAULT 0,
+    level INTEGER DEFAULT 1,
+    referral_code TEXT,
+    referrer_id INTEGER,
+    verified BOOLEAN DEFAULT FALSE,
+    total_earned INTEGER DEFAULT 0,
+    total_spent INTEGER DEFAULT 0,
+    wallet_address TEXT,
+    free_recommendations_used INTEGER DEFAULT 0,
+    trust_score INTEGER DEFAULT 100,
+    escrow_balance REAL DEFAULT 0,
+    debt REAL DEFAULT 0
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS referrals (
+    referral_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    referrer_id INTEGER,
+    referred_id INTEGER,
+    level INTEGER,
+    date TEXT DEFAULT CURRENT_TIMESTAMP,
+    verified BOOLEAN DEFAULT FALSE
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS transactions (
+    tx_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    points INTEGER,
+    type TEXT,
+    date TEXT DEFAULT CURRENT_TIMESTAMP,
+    description TEXT
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS quests (
+    quest_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    quest_type TEXT,
+    progress INTEGER DEFAULT 0,
+    completed BOOLEAN DEFAULT FALSE,
+    date TEXT DEFAULT CURRENT_TIMESTAMP
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    symbol TEXT,
+    name TEXT,
+    recommendation TEXT,
+    reason TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    profit REAL DEFAULT 0,
+    verified BOOLEAN DEFAULT FALSE
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS audits (
+    audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trade_id INTEGER,
+    auditor_id INTEGER,
+    vote TEXT,
+    comments TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS user_achievements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    achievement_id TEXT,
+    progress INTEGER DEFAULT 0
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS achievements_unlocked (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    achievement_id TEXT,
+    date TEXT DEFAULT CURRENT_TIMESTAMP
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS user_interests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    symbol TEXT
+)''')
+
+conn.commit()
+
+# ===== إعدادات النظام الذكية =====
+class SmartConfig:
+    def __init__(self):
+        self.POINT_VALUE = 0.001
+        self.CONVERSION_FEE = 0.6
+        self.MIN_CONVERSION = 5000
+        self.MAX_POINTS_PER_USER = 10000
+        self.REFERRAL_REWARDS = {1: 500, 2: 250, 3: 100}
+        self.REFERRAL_VERIFICATION_DAYS = 3
+        self.REFERRAL_BONUS_THRESHOLDS = {5: 200, 10: 500, 20: 1000}
+        self.BASE_RECOMMENDATION_PRICE = 10
+        self.PRICE_DYNAMICS = {
+            'new_user_discount': 0.5,
+            'active_user_discount': 0.2,
+            'high_balance_penalty': 0.3
+        }
+        self.COMMISSION_RATE = 0.15
+        self.MIN_TRADE_SIZE = 10
+        self.MAX_DEVIATION = 0.05
+        self.TRUST_SCORE_RANGES = {
+            'high': (80, 100),
+            'medium': (50, 79),
+            'low': (0, 49)
+        }
+        self.POINT_BURN_RATE = 0.05
+        self.ECONOMIC_CHECK_INTERVAL = 604800
+        self.DAILY_REWARD = 10
+        self.QUESTS = {
+            'daily': [
+                {"id": "login", "points": 10, "desc": "سجل دخول يومي"},
+                {"id": "share", "points": 30, "desc": "شارك البوت"},
+                {"id": "audit", "points": 50, "desc": "تدقيق صفقة"}
+            ],
+            'weekly': [
+                {"id": "refer_3", "points": 200, "desc": "أحِل 3 أصدقاء"},
+                {"id": "trade_5", "points": 150, "desc": "نفذ 5 صفقات"}
+            ]
+        }
+        self.SUPPORTED_CURRENCIES = ['USD', 'BTC', 'ETH']
+        self.MARKET_THRESHOLDS = {
+            'bearish': {'fee': 0.5, 'price': 8},
+            'bullish': {'fee': 0.7, 'price': 12},
+            'normal': {'fee': 0.6, 'price': 10}
+        }
+        self.FREE_RECOMMENDATIONS = 1
+        self.TRIAL_PERIOD = 30
+        self.ANALYSTS = [
+            "Crypto_Arabia", "Binance_KSA", "CryptoSheikh", "ArabWhale", "EmiratesCrypto",
+            "Qatar_Bitcoin", "EgyptBlockchain", "IraqiCrypto", "KuwaitCoin", "Oman_Bitcoin",
+            "YemeniTrader", "SyrianCrypto", "JordanCrypto", "LebanonCrypto", "TunisiaBlockchain",
+            "AlgeriaCrypto", "MoroccoCrypto", "Sudan_Bitcoin", "LibyaCrypto", "MauritaniaCrypto"
+        ]
+        self.TOP_100_COINS = [
+            "BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "AVAX", "DOT", "DOGE", "SHIB",
+            "MATIC", "LTC", "TRX", "LINK", "ATOM", "UNI", "XLM", "ALGO", "VET", "ICP"
+        ]
+        self.CACHE_DIR = "cache"
+        os.makedirs(self.CACHE_DIR, exist_ok=True)
+        self.ADMIN_CHANNEL = "@GoldenPyramidAdmin"
+        self.ADMIN_ID = "YOUR_ADMIN_ID"
+
+config = SmartConfig()
+
+# ===== نظام جمع البيانات الذكية =====
+class DataCollector:
+    def __init__(self, config):
+        self.config = config
+        self.ua = UserAgent()
+        
+    def get_cache_or_fetch(self, key, fetch_function, expiration=3600):
+        cache_file = os.path.join(self.config.CACHE_DIR, f"{key}.json")
+        
+        if os.path.exists(cache_file):
+            modified_time = os.path.getmtime(cache_file)
+            if (time.time() - modified_time) < expiration:
+                try:
+                    with open(cache_file, "r") as f:
+                        return json.load(f)
+                except:
+                    pass
+        
+        data = fetch_function()
+        
+        if data:
+            try:
+                with open(cache_file, "w") as f:
+                    json.dump(data, f)
+            except:
+                pass
+            return data
+            
+        return None
+        
+    def fetch_top_coins(self):
+        try:
+            url = "https://api.coingecko.com/api/v3/coins/markets"
+            params = {
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": 20,
+                "page": 1,
+                "sparkline": False
+            }
+            headers = {'User-Agent': self.ua.random}
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            response.raise_for_status()
+            
+            coins = []
+            for coin in response.json():
+                coins.append({
+                    'symbol': coin['symbol'].upper(),
+                    'name': coin['name'],
+                    'price': coin['current_price']
+                })
+            
+            return coins
+        
+        except Exception as e:
+            logger.error(f"خطأ في جلب بيانات العملات: {str(e)}")
+            return [
+                {"symbol": coin, "name": coin, "price": 0.0} 
+                for coin in self.config.TOP_100_COINS[:20]
+            ]
+
+    def fetch_analyst_recommendations(self):
+        recommendations = []
+        today = datetime.now().date()
+        
+        for analyst in self.config.ANALYSTS:
+            try:
+                query = f'from:{analyst} (شراء OR بيع OR احتفاظ) since:{today}'
+                for tweet in sntwitter.TwitterSearchScraper(query).get_items():
+                    content = tweet.content
+                    coins = re.findall(r'\b([A-Z]{3,5})\b', content)
+                    
+                    recommendations.append({
+                        'analyst': analyst,
+                        'content': content,
+                        'coins': list(set(coins)),
+                        'timestamp': tweet.date.isoformat()
+                    })
+            except Exception as e:
+                logger.error(f"خطأ في جلب بيانات {analyst}: {str(e)}")
+        
+        return recommendations
+
+# ===== نظام التحليل الذكي =====
+class AnalysisEngine:
+    def __init__(self, config):
+        self.config = config
+        self.model = IsolationForest(n_estimators=100, contamination=0.1, random_state=42)
+        
+    def analyze_data(self, coins_data, recommendations_data):
+        try:
+            coins = coins_data
+            recs = recommendations_data
+            
+            analysis_data = []
+            for coin in coins:
+                symbol = coin['symbol']
+                coin_recs = [r for r in recs if symbol in r['coins']]
+                
+                if coin_recs:
+                    sentiment = self.calculate_sentiment(coin_recs)
+                    analysis_data.append({
+                        'symbol': symbol,
+                        'sentiment': sentiment,
+                        'mentions': len(coin_recs)
+                    })
+            
+            if analysis_data:
+                X = np.array([[d['sentiment'], d['mentions']] for d in analysis_data])
+                self.model.fit(X)
+                predictions = self.model.predict(X)
+                
+                recommendations = []
+                for i, data in enumerate(analysis_data):
+                    if predictions[i] == -1:
+                        recommendations.append({
+                            'symbol': data['symbol'],
+                            'name': next((c['name'] for c in coins if c['symbol'] == data['symbol']), data['symbol']),
+                            'sentiment': data['sentiment'],
+                            'mentions': data['mentions'],
+                            'recommendation': "🚀 شراء قوي" if data['sentiment'] > 0 else "🔻 بيع فوري",
+                            'reason': "تحليل إيجابي من المحللين" if data['sentiment'] > 0 else "تحليل سلبي من المحللين"
+                        })
+                
+                return sorted(recommendations, key=lambda x: abs(x['sentiment']), reverse=True)[:5]
+        
+        except Exception as e:
+            logger.error(f"خطأ في التحليل: {str(e)}")
+        
+        return [{
+            'symbol': "BTC",
+            'name': "Bitcoin",
+            'recommendation': "🚀 شراء قوي",
+            'reason': "أداء تاريخي قوي وتحليل إيجابي من المحللين",
+            'sentiment': 0.85,
+            'mentions': 15
+        }]
+        
+    def calculate_sentiment(self, recommendations):
+        positive_keywords = ["شراء", "ممتاز", "جيد", "يرتفع", "قوي", "فرصة", "مستقبل", "زيادة"]
+        negative_keywords = ["بيع", "ضعيف", "هبوط", "تجنب", "خطر", "انخفاض", "مشكلة"]
+        
+        total_score = 0
+        for rec in recommendations:
+            score = 0
+            content = rec['content'].lower()
+            
+            for word in positive_keywords:
+                if word in content:
+                    score += 1
+                    
+            for word in negative_keywords:
+                if word in content:
+                    score -= 1
+                    
+            total_score += max(-1, min(1, score / 3))
+            
+        return total_score / len(recommendations) if recommendations else 0
+
+# ===== نظام مكافحة التضخم =====
+class PointEconomy:
+    @staticmethod
+    def adjust_supply():
+        try:
+            c.execute("SELECT SUM(points) FROM users")
+            total_points = c.fetchone()[0] or 0
+            
+            burn_amount = int(total_points * config.POINT_BURN_RATE)
+            c.execute("UPDATE users SET points = points * ?", 
+                     (1 - config.POINT_BURN_RATE,))
+            conn.commit()
+            
+            logger.info(f"تم حرق {burn_amount} نقطة من العرض")
+            return burn_amount
+        except Exception as e:
+            logger.error(f"خطأ في ضبط العرض: {e}")
+            return 0
+
+    @staticmethod
+    def get_economic_status():
+        try:
+            c.execute("SELECT SUM(points) FROM users")
+            total_circulating = c.fetchone()[0] or 0
+            
+            c.execute("SELECT SUM(total_earned) FROM users")
+            total_earned = c.fetchone()[0] or 0
+            
+            c.execute("SELECT SUM(total_spent) FROM users")
+            total_spent = c.fetchone()[0] or 0
+            
+            return {
+                'circulating': total_circulating,
+                'total_earned': total_earned,
+                'total_spent': total_spent,
+                'health_ratio': total_spent / (total_earned + 1)
+            }
+        except Exception as e:
+            logger.error(f"خطأ في الحصول على الحالة الاقتصادية: {e}")
+            return {}
+
+# ===== نظام التحقق =====
+class VerificationSystem:
+    @staticmethod
+    def verify_user(user_id):
+        try:
+            c.execute("SELECT COUNT(*) FROM transactions WHERE user_id = ?", (user_id,))
+            activity_count = c.fetchone()[0]
+            
+            if activity_count >= 3:
+                c.execute("UPDATE users SET verified = TRUE WHERE user_id = ?", (user_id,))
+                conn.commit()
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"خطأ في التحقق من المستخدم: {e}")
+            return False
+
+    @staticmethod
+    def verify_referrals():
+        try:
+            c.execute('''SELECT referral_id, referrer_id 
+                         FROM referrals 
+                         WHERE verified = FALSE 
+                         AND date < DATE('now', ?)''',
+                     (f'-{config.REFERRAL_VERIFICATION_DAYS} days',))
+            
+            unverified = c.fetchall()
+            for ref_id, referrer_id in unverified:
+                if VerificationSystem.verify_user(referrer_id):
+                    c.execute("UPDATE referrals SET verified = TRUE WHERE referral_id = ?", (ref_id,))
+                    c.execute("SELECT level FROM referrals WHERE referral_id = ?", (ref_id,))
+                    level = c.fetchone()[0]
+                    reward = config.REFERRAL_REWARDS.get(level, 0)
+                    PointSystem.add_points(referrer_id, reward, f"مكافأة إحالة مؤكدة - المستوى {level}")
+            
+            conn.commit()
+            return len(unverified)
+        except Exception as e:
+            logger.error(f"خطأ في التحقق من الإحالات: {e}")
+            return 0
+
+# ===== نظام النقاط =====
+class PointSystem:
+    @staticmethod
+    def add_points(user_id, amount, reason=""):
+        try:
+            c.execute("SELECT points FROM users WHERE user_id = ?", (user_id,))
+            current = c.fetchone()[0] or 0
+            
+            new_total = min(current + amount, config.MAX_POINTS_PER_USER)
+            c.execute("UPDATE users SET points = ?, total_earned = total_earned + ? WHERE user_id = ?", 
+                     (new_total, amount, user_id))
+            
+            c.execute('''INSERT INTO transactions 
+                         (user_id, points, type, description)
+                         VALUES (?, ?, 'earn', ?)''',
+                     (user_id, amount, reason))
+            conn.commit()
+            
+            return new_total
+        except Exception as e:
+            logger.error(f"خطأ في إضافة النقاط: {e}")
+            return 0
+
+    @staticmethod
+    def spend_points(user_id, amount, reason=""):
+        try:
+            c.execute("SELECT points FROM users WHERE user_id = ?", (user_id,))
+            current_points = c.fetchone()[0] or 0
+            
+            if current_points >= amount:
+                c.execute("UPDATE users SET points = points - ?, total_spent = total_spent + ? WHERE user_id = ?", 
+                         (amount, amount, user_id))
+                
+                c.execute('''INSERT INTO transactions 
+                             (user_id, points, type, description)
+                             VALUES (?, ?, 'spend', ?)''',
+                         (user_id, amount, reason))
+                conn.commit()
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"خطأ في خصم النقاط: {e}")
+            return False
+
+# ===== نظام التوصيات المتكامل =====
+class RecommendationEngine:
+    def __init__(self, config):
+        self.config = config
+        self.collector = DataCollector(config)
+        self.analyzer = AnalysisEngine(config)
+        self.recommendations = []
+        self.last_update = datetime.min
+
+    def get_dynamic_price(self, user_id):
+        try:
+            base_price = self.config.BASE_RECOMMENDATION_PRICE
+            
+            c.execute("SELECT join_date FROM users WHERE user_id = ?", (user_id,))
+            join_date = datetime.strptime(c.fetchone()[0], '%Y-%m-%d')
+            if (datetime.now() - join_date).days < 3:
+                return int(base_price * (1 - self.config.PRICE_DYNAMICS['new_user_discount']))
+            
+            c.execute('''SELECT COUNT(*) FROM transactions 
+                         WHERE user_id = ? AND date > DATE('now', '-7 days')''',
+                     (user_id,))
+            weekly_activity = c.fetchone()[0]
+            if weekly_activity > 5:
+                return int(base_price * (1 - self.config.PRICE_DYNAMICS['active_user_discount']))
+            
+            c.execute("SELECT points FROM users WHERE user_id = ?", (user_id,))
+            user_points = c.fetchone()[0] or 0
+            if user_points > 5000:
+                return int(base_price * (1 + self.config.PRICE_DYNAMICS['high_balance_penalty']))
+            
+            return base_price
+        except Exception as e:
+            logger.error(f"خطأ في حساب السعر: {e}")
+            return self.config.BASE_RECOMMENDATION_PRICE
+
+    def generate_recommendation(self, user_id, use_free=False):
+        try:
+            if use_free:
+                today = datetime.now().strftime("%Y-%m-%d")
+                c.execute("SELECT free_recommendations_used FROM users WHERE user_id = ?", (user_id,))
+                free_used = c.fetchone()[0] or 0
+                
+                if free_used >= self.config.FREE_RECOMMENDATIONS:
+                    return None
+                
+                price = 0
+            else:
+                price = self.get_dynamic_price(user_id)
+            
+            if not self.recommendations or (datetime.now() - self.last_update).seconds > 3600:
+                coins_data = self.collector.get_cache_or_fetch(
+                    "top_coins", 
+                    self.collector.fetch_top_coins,
+                    expiration=3600
+                )
+                recs_data = self.collector.get_cache_or_fetch(
+                    "analyst_recommendations",
+                    self.collector.fetch_analyst_recommendations,
+                    expiration=1800
+                )
+                if coins_data and recs_data:
+                    self.recommendations = self.analyzer.analyze_data(coins_data, recs_data)
+                    self.last_update = datetime.now()
+            
+            if not self.recommendations:
+                coins = ["BTC", "ETH", "XRP", "ADA", "SOL", "DOT", "AVAX", "MATIC"]
+                actions = ["شراء", "بيع", "احتفاظ"]
+                strengths = ["قوية", "متوسطة", "ضعيفة"]
+                
+                recommendation = {
+                    "symbol": random.choice(coins),
+                    "name": random.choi
