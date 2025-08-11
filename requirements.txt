@@ -3,7 +3,6 @@ pandas
 numpy
 requests
 beautifulsoup4
-snscrape
 fake-useragent
 scikit-learn
 cryptography
