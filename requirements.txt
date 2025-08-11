@@ -8,3 +8,5 @@ scikit-learn
 cryptography
 Pillow
 snscrape==0.6.2.20230320
+importlib-metadata==6.8.0
+importlib-resources==6.1.1
