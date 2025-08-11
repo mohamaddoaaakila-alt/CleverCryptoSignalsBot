@@ -1,3 +1,6 @@
+import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import sqlite3
 import hashlib
 import random
@@ -21,6 +24,15 @@ from bs4 import BeautifulSoup
 import snscrape.modules.twitter as sntwitter
 from sklearn.ensemble import IsolationForest
 from fake_useragent import UserAgent
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+ADMIN_ID = os.environ.get("ADMIN_ID")
+
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable is required")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is required")
 
 # ===== إعدادات النظام =====
 logging.basicConfig(
