@@ -193,7 +193,7 @@ class SmartConfig:
         self.CACHE_DIR = "cache"
         os.makedirs(self.CACHE_DIR, exist_ok=True)
         self.ADMIN_CHANNEL = "@GoldenPyramidAdmin"
-        self.ADMIN_ID = "YOUR_ADMIN_ID"
+        self.ADMIN_ID = "ADMIN_ID"
 
 config = SmartConfig()
 
