@@ -1,7 +1,6 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import sqlite3
 import hashlib
 import random
 import json
@@ -46,7 +45,7 @@ conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 c = conn.cursor()
 
 # إنشاء الجداول
-c.execute )CREATE TABLE IF NOT EXISTS users 
+c.execute('''(CREATE TABLE IF NOT EXISTS users 
     user_id BIGINT PRIMARY KEY,
     username TEXT,
     join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -63,7 +62,7 @@ c.execute )CREATE TABLE IF NOT EXISTS users
     trust_score INTEGER DEFAULT 100,
     escrow_balance REAL DEFAULT 0,
     debt REAL DEFAULT 0
-(
+)''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS referrals (
     referral_id INTEGER PRIMARY KEY AUTOINCREMENT,
