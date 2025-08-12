@@ -45,7 +45,7 @@ conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 c = conn.cursor()
 
 # إنشاء الجداول
-c.execute('''(CREATE TABLE IF NOT EXISTS users 
+c.execute('''CREATE TABLE IF NOT EXISTS users( 
     user_id BIGINT PRIMARY KEY,
     username TEXT,
     join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -65,70 +65,70 @@ c.execute('''(CREATE TABLE IF NOT EXISTS users
 )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS referrals (
-    referral_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    referrer_id INTEGER,
-    referred_id INTEGER,
+    referral_id BIGINT PRIMARY KEY AUTOINCREMENT,
+    referrer_id BIGINT,
+    referred_id BIGINT,
     level INTEGER,
-    date TEXT DEFAULT CURRENT_TIMESTAMP,
+    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     verified BOOLEAN DEFAULT FALSE
 )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS transactions (
-    tx_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
+    tx_id BIGINT PRIMARY KEY AUTOINCREMENT,
+    user_id BIGINT,
     points INTEGER,
     type TEXT,
-    date TEXT DEFAULT CURRENT_TIMESTAMP,
+    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     description TEXT
 )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS quests (
     quest_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
+    user_id BIGINT,
     quest_type TEXT,
     progress INTEGER DEFAULT 0,
     completed BOOLEAN DEFAULT FALSE,
-    date TEXT DEFAULT CURRENT_TIMESTAMP
+    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS recommendations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
+    id BIGINT PRIMARY KEY AUTOINCREMENT,
+    user_id BIGINT,
     symbol TEXT,
     name TEXT,
     recommendation TEXT,
     reason TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     profit REAL DEFAULT 0,
     verified BOOLEAN DEFAULT FALSE
 )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS audits (
-    audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    trade_id INTEGER,
-    auditor_id INTEGER,
+    audit_id BIGINT PRIMARY KEY AUTOINCREMENT,
+    trade_id BIGINT,
+    auditor_id BIGINT,
     vote TEXT,
     comments TEXT,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS user_achievements (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
+    id BIGINT PRIMARY KEY AUTOINCREMENT,
+    user_id BIGINT,
     achievement_id TEXT,
     progress INTEGER DEFAULT 0
 )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS achievements_unlocked (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    achievement_id TEXT,
-    date TEXT DEFAULT CURRENT_TIMESTAMP
+    id BIGINT PRIMARY KEY AUTOINCREMENT,
+    user_id BIGINT,
+    achievement_id BIGINT,
+    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS user_interests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
+    id BIGINT PRIMARY KEY AUTOINCREMENT,
+    user_id BIGINT,
     symbol TEXT
 )''')
 
